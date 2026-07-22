@@ -1,6 +1,7 @@
 """Continuous microphone capture, delivered as fixed-size frames on a callback."""
 from __future__ import annotations
 
+import time
 from typing import Callable, Optional
 
 import numpy as np
@@ -32,20 +33,54 @@ def find_input_device(name_substring: str) -> int:
 
 
 class AudioCapture:
-    """Streams mono float32 audio from the mic in fixed FRAME_SIZE chunks."""
+    """Streams mono float32 audio from the mic in fixed FRAME_SIZE chunks.
+
+    Automatically recovers from transient PortAudio errors (for example when
+    a USB/Bluetooth device is disconnected and reconnected) by restarting the
+    stream instead of crashing the app.
+    """
 
     def __init__(self, device: Optional[int] = None, sample_rate: int = SAMPLE_RATE,
-                 frame_size: int = FRAME_SIZE):
+                 frame_size: int = FRAME_SIZE,
+                 max_restarts: int = 10, restart_backoff_s: float = 0.5) -> None:
         self.device = device
         self.sample_rate = sample_rate
         self.frame_size = frame_size
+        self._max_restarts = max_restarts
+        self._restart_backoff_s = restart_backoff_s
         self._stream: Optional[sd.InputStream] = None
+        self._on_frame: Optional[Callable[[np.ndarray], None]] = None
 
     def start(self, on_frame: Callable[[np.ndarray], None]) -> None:
+        self._on_frame = on_frame
+        restarts = 0
+        while True:
+            try:
+                self._start_stream()
+                return
+            except Exception as e:
+                if restarts >= self._max_restarts:
+                    raise RuntimeError(
+                        f"Audio stream failed after {restarts} restarts: {e}") from e
+                print(f"[audio] stream error ({e}); restarting in "
+                      f"{self._restart_backoff_s}s ({restarts + 1}/{self._max_restarts})...")
+                self._stop_stream()
+                time.sleep(self._restart_backoff_s)
+                restarts += 1
+
+    def stop(self) -> None:
+        self._stop_stream()
+
+    def _start_stream(self) -> None:
+        assert self._on_frame is not None
+
         def _callback(indata, frames, time_info, status):
             if status:
                 print(f"[audio] status: {status}")
-            on_frame(indata[:, 0].copy())
+            try:
+                self._on_frame(indata[:, 0].copy())
+            except Exception as e:
+                print(f"[audio] callback error: {e}")
 
         extra_settings = None
         try:
@@ -66,8 +101,14 @@ class AudioCapture:
         )
         self._stream.start()
 
-    def stop(self) -> None:
+    def _stop_stream(self) -> None:
         if self._stream is not None:
-            self._stream.stop()
-            self._stream.close()
+            try:
+                self._stream.stop()
+            except Exception:
+                pass
+            try:
+                self._stream.close()
+            except Exception:
+                pass
             self._stream = None
