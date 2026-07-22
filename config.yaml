@@ -26,3 +26,10 @@ output:
 # Only active in "type" mode.
 enter_phrases:
   - press enter
+
+# Offline simulation: feed 16-bit mono 16 kHz WAVs into the pipeline instead
+# of the microphone. Leave empty for normal mic mode.
+# simulate:
+#   files:
+#     - samples/jfk.wav
+#   loop: false

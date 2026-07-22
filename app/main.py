@@ -20,6 +20,7 @@ import sounddevice as sd
 from audio_capture import AudioCapture, find_input_device
 from config import CONFIG_PATH, load_config
 from injector import press_enter, set_clipboard, type_text
+from simulator import SimulatedCapture
 from transcriber import WhisperServer
 from tray import TrayUI
 from vad import SileroVAD, SpeechSegmenter, VadConfig
@@ -46,7 +47,7 @@ class DictationApp:
         self.segments: queue.Queue = queue.Queue()
         self.log = open(LOG_PATH, "a", encoding="utf-8")
         self.server: WhisperServer | None = None
-        self.capture: AudioCapture | None = None
+        self.capture: AudioCapture | SimulatedCapture | None = None
         self.segmenter: SpeechSegmenter | None = None
         self.tray = TrayUI(self.toggle_pause, self.open_config, self.reload_config, self.quit)
         self._lock = threading.Lock()  # guards server/capture swaps during reload
@@ -55,9 +56,6 @@ class DictationApp:
 
     def start_pipeline(self):
         cfg = self.cfg
-        if not cfg.mic_device:
-            _list_input_devices()
-            raise SystemExit(f"\nSet 'mic_device' in {CONFIG_PATH} and start again.")
 
         print("Starting whisper-server (loading model into VRAM)...")
         self.server = WhisperServer(str(cfg.whisper_server), str(cfg.whisper_model),
@@ -72,10 +70,20 @@ class DictationApp:
                             speech_pad_ms=cfg.vad.speech_pad_ms)
         self.segmenter = SpeechSegmenter(vad, vad_cfg, self._on_speech_start, self._on_speech_end)
 
-        device = find_input_device(cfg.mic_device)
-        self.capture = AudioCapture(device=device)
-        self.capture.start(on_frame=self._on_frame)
-        print(f"Using mic device [{device}] (matched {cfg.mic_device!r}). Listening.")
+        sim_files = cfg.simulate.files
+        if sim_files:
+            self.capture = SimulatedCapture(sim_files, loop=cfg.simulate.loop)
+            self.capture.start(on_frame=self._on_frame)
+            loop_flag = " (loop)" if cfg.simulate.loop else ""
+            print(f"Simulation mode: {len(sim_files)} file(s){loop_flag}.")
+        else:
+            if not cfg.mic_device:
+                _list_input_devices()
+                raise SystemExit(f"\nSet 'mic_device' in {CONFIG_PATH} or use simulate mode.")
+            device = find_input_device(cfg.mic_device)
+            self.capture = AudioCapture(device=device)
+            self.capture.start(on_frame=self._on_frame)
+            print(f"Using mic device [{device}] (matched {cfg.mic_device!r}). Listening.")
 
     def stop_pipeline(self):
         if self.capture is not None:

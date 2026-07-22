@@ -60,6 +60,12 @@ class OutputSettings:
 
 
 @dataclass
+class SimulateSettings:
+    files: list = field(default_factory=list)
+    loop: bool = False
+
+
+@dataclass
 class AppConfig:
     whisper_model: Path = PROJECT_ROOT / "models/ggml-small.en.bin"
     whisper_server: Path = PROJECT_ROOT / "whisper.cpp/build/bin/Release/whisper-server.exe"
@@ -68,6 +74,7 @@ class AppConfig:
     vad: VadSettings = field(default_factory=VadSettings)
     output: OutputSettings = field(default_factory=OutputSettings)
     enter_phrases: list = field(default_factory=lambda: ["press enter"])
+    simulate: SimulateSettings = field(default_factory=SimulateSettings)
 
 
 def _resolve(path_str: str) -> Path:
@@ -83,6 +90,7 @@ def load_config() -> AppConfig:
     raw = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8")) or {}
     vad_raw = raw.get("vad") or {}
     out_raw = raw.get("output") or {}
+    sim_raw = raw.get("simulate") or {}
     cfg = AppConfig(
         whisper_model=_resolve(raw.get("whisper_model", "models/ggml-small.en.bin")),
         whisper_server=_resolve(raw.get("whisper_server",
@@ -101,6 +109,10 @@ def load_config() -> AppConfig:
             inter_batch_delay_ms=int(out_raw.get("inter_batch_delay_ms", 5)),
         ),
         enter_phrases=[str(p) for p in (raw.get("enter_phrases") or ["press enter"])],
+        simulate=SimulateSettings(
+            files=[str(p) for p in (sim_raw.get("files") or [])],
+            loop=bool(sim_raw.get("loop", False)),
+        ),
     )
 
     if not cfg.whisper_model.exists():
