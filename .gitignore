@@ -1,0 +1,40 @@
+# Python
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+
+# Claude local settings
+.claude/
+
+# Logs
+*.log
+dictation.log
+whisper-server.log
+server-test-*.log
+
+# Upstream git submodule/dependency (has its own remote)
+whisper.cpp/
+
+# Stray directory
+~./
+models/*.bin
+models/*.onnx
+models/*.pth
+models/*.pt
+models/*.safetensors
+models/*.gguf
+models/*.ggml
+
+# Build artifacts
+whisper.cpp/build/
+whisper.cpp/*.log
+whisper.cpp/.vs/
+
+# OS
+Thumbs.db
+Desktop.ini
