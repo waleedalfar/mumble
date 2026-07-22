@@ -15,6 +15,7 @@ import sounddevice as sd
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from audio_capture import AudioCapture, find_input_device, FRAME_SIZE, SAMPLE_RATE
+from main import _fallback_input_device
 
 
 class TestAudioCapture:
@@ -74,7 +75,19 @@ class TestAudioCapture:
         fake_devices = [
             {"name": "Line 1", "max_input_channels": 1, "hostapi": 0},
         ]
+        def fake_hostapis(idx):
+            return {"name": "Windows WASAPI"}
         with patch.object(sd, "query_devices", return_value=fake_devices):
-            with patch.object(sd, "query_hostapis", return_value=[{"name": "Windows WASAPI"}]):
+            with patch.object(sd, "query_hostapis", side_effect=fake_hostapis):
                 with pytest.raises(LookupError, match="No input device matching"):
                     find_input_device("nonexistent mic")
+
+    def test_fallback_prefers_mic_named_device(self):
+        fake_devices = [
+            {"name": "Line 1", "max_input_channels": 0, "hostapi": 0},
+            {"name": "Microphone Array", "max_input_channels": 1, "hostapi": 0},
+            {"name": "Stereo Mix", "max_input_channels": 1, "hostapi": 0},
+        ]
+        with patch.object(sd, "query_devices", return_value=fake_devices):
+            idx = _fallback_input_device()
+            assert fake_devices[idx]["name"] == "Microphone Array"

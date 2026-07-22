@@ -24,6 +24,7 @@ server_port: 8178
 # Input device, matched by name substring. Leave empty ("") to print the available
 # devices at startup and exit.
 mic_device: "AirPods Max"
+mic_fallback: true
 
 vad:
   threshold: 0.5          # speech probability needed to count a frame as speech (0-1)
@@ -71,6 +72,7 @@ class AppConfig:
     whisper_server: Path = PROJECT_ROOT / "whisper.cpp/build/bin/Release/whisper-server.exe"
     server_port: int = 8178
     mic_device: str = ""
+    mic_fallback: bool = True
     vad: VadSettings = field(default_factory=VadSettings)
     output: OutputSettings = field(default_factory=OutputSettings)
     enter_phrases: list = field(default_factory=lambda: ["press enter"])
@@ -97,6 +99,7 @@ def load_config() -> AppConfig:
                                         "whisper.cpp/build/bin/Release/whisper-server.exe")),
         server_port=int(raw.get("server_port", 8178)),
         mic_device=str(raw.get("mic_device") or ""),
+        mic_fallback=bool(raw.get("mic_fallback", True)),
         vad=VadSettings(
             threshold=float(vad_raw.get("threshold", 0.5)),
             min_speech_ms=int(vad_raw.get("min_speech_ms", 100)),

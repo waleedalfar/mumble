@@ -40,6 +40,18 @@ def _list_input_devices() -> None:
             print(f"  {dev['name']}")
 
 
+def _fallback_input_device() -> int:
+    best = None
+    for idx, dev in enumerate(sd.query_devices()):
+        if dev["max_input_channels"] <= 0:
+            continue
+        if "Microphone" in dev["name"] or "Mic" in dev["name"]:
+            return idx
+        if best is None:
+            best = idx
+    return best if best is not None else 0
+
+
 class DictationApp:
     def __init__(self):
         self.cfg = load_config()
@@ -80,10 +92,18 @@ class DictationApp:
             if not cfg.mic_device:
                 _list_input_devices()
                 raise SystemExit(f"\nSet 'mic_device' in {CONFIG_PATH} or use simulate mode.")
-            device = find_input_device(cfg.mic_device)
+            try:
+                device = find_input_device(cfg.mic_device)
+                print(f"Using mic device [{device}] (matched {cfg.mic_device!r}).")
+            except LookupError as e:
+                if not cfg.mic_fallback:
+                    raise SystemExit(str(e)) from e
+                print(f"[mic] primary device not found: {e}")
+                device = _fallback_input_device()
+                print(f"[mic] fallback to device [{device}].")
             self.capture = AudioCapture(device=device)
             self.capture.start(on_frame=self._on_frame)
-            print(f"Using mic device [{device}] (matched {cfg.mic_device!r}). Listening.")
+            print("Listening.")
 
     def stop_pipeline(self):
         if self.capture is not None:
