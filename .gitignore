@@ -3,6 +3,11 @@ venv/
 __pycache__/
 *.py[cod]
 *.egg-info/
+.pytest_cache/
+app/.pytest_cache/
+
+# Personal machine config — auto-generated with defaults on first run
+config.yaml
 
 # IDE
 .vscode/

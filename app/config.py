@@ -23,7 +23,7 @@ server_port: 8178
 
 # Input device, matched by name substring. Leave empty ("") to print the available
 # devices at startup and exit.
-mic_device: "AirPods Max"
+mic_device: ""
 mic_fallback: true
 
 vad:

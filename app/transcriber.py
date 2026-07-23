@@ -30,6 +30,9 @@ class WhisperServer:
         self._proc: subprocess.Popen | None = None
         self._log_file = None
         self._url = f"http://{host}:{port}/inference"
+        # Reused across calls: avoids a fresh TCP/HTTP handshake to the local
+        # server on every segment.
+        self._session = requests.Session()
 
     def start(self, timeout_s: float = 30.0) -> None:
         if not self.server_path.exists():
@@ -55,6 +58,7 @@ class WhisperServer:
              "--port", str(self.port),
              "-t", str(self.threads),
              "-l", "en",
+             "-bo", "1",  # best-of 1: only matters on temperature-fallback decodes, cheap safety margin
              "--no-timestamps"],
             stdout=self._log_file,
             stderr=subprocess.STDOUT,
@@ -98,7 +102,7 @@ class WhisperServer:
             w.writeframes((np.clip(audio, -1.0, 1.0) * 32767).astype(np.int16).tobytes())
         buf.seek(0)
 
-        resp = requests.post(
+        resp = self._session.post(
             self._url,
             files={"file": ("segment.wav", buf, "audio/wav")},
             data={"response_format": "json", "temperature": "0.0"},

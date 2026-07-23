@@ -1,0 +1,7 @@
+sounddevice==0.5.5
+numpy==2.5.1
+onnxruntime==1.27.0
+requests==2.34.2
+PyYAML==6.0.3
+pystray==0.19.5
+pillow==12.3.0
