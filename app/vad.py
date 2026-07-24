@@ -62,7 +62,7 @@ class SpeechSegmenter:
     """Feeds fixed-size frames through SileroVAD and emits speech-segment start/end events."""
 
     def __init__(self, vad: SileroVAD, config: VadConfig,
-                 on_speech_start: Callable[[float], None],
+                 on_speech_start: Callable[[float, np.ndarray], None],
                  on_speech_end: Callable[[float, float, np.ndarray], None]):
         self._vad = vad
         self._cfg = config
@@ -97,7 +97,9 @@ class SpeechSegmenter:
                     self._consec_silence = 0
                     self._segment_frames = list(self._pre_roll)
                     self._speech_start_s = self._elapsed_s - len(self._segment_frames) * frame_dur
-                    self._on_speech_start(max(0.0, self._speech_start_s))
+                    initial_audio = np.concatenate(self._segment_frames) if self._segment_frames \
+                        else np.zeros(0, dtype=np.float32)
+                    self._on_speech_start(max(0.0, self._speech_start_s), initial_audio)
             else:
                 self._consec_speech = 0
         else:

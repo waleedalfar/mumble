@@ -1,0 +1,51 @@
+# Portable profile -- for a regular office laptop/desktop with no dedicated
+# GPU (built whisper.cpp CPU-only, i.e. no -DGGML_CUDA=ON flag, see README
+# "Choosing your profile"). Copy this to config.yaml at the project root,
+# then set mic_device.
+#
+#   copy profiles\config.portable.yaml.example config.yaml   (from the project root)
+
+# Smaller model: much faster on CPU than small.en, at some accuracy cost.
+# ggml-small.en-q5_1.bin (quantized small.en) is a good middle ground if you
+# built it with whisper-quantize.exe -- see README. If base.en still feels
+# slow (weak/older CPU, no AVX2, few cores), drop to ggml-tiny.en.bin --
+# smaller/faster still, with a real further accuracy cost.
+whisper_model: models/ggml-base.en.bin
+whisper_server: whisper.cpp/build/bin/Release/whisper-server.exe
+server_port: 8178
+
+mic_device: ""
+mic_fallback: true
+
+vad:
+  threshold: 0.5
+  min_speech_ms: 100
+  min_silence_ms: 600
+  speech_pad_ms: 300
+
+output:
+  mode: type
+  batch_chars: 32
+  inter_batch_delay_ms: 5
+
+enter_phrases:
+  - press enter
+
+hotkey:
+  enabled: true
+  toggle_pause: "ctrl+alt+d"
+
+overlay:
+  enabled: true
+  position: bottom-right
+
+# Left off on purpose: streaming re-transcribes the in-progress utterance
+# repeatedly, which is essentially free on a GPU but adds real, constant CPU
+# load here that would fight with everything else running on the machine.
+# The app would refuse to enable it on this hardware anyway (see gpu_check.py
+# and README), but setting it to false explicitly documents the intent.
+streaming:
+  enabled: false
+  step_ms: 600
+  max_window_s: 10.0
+  stability_confirmations: 2

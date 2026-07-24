@@ -101,7 +101,13 @@ def set_clipboard(text: str) -> None:
 def _sanitize(text: str) -> str:
     # No Enter (submits in Claude chat, executes in terminals), no tabs (focus jumps
     # / autocomplete in browsers); collapse the result to single spaces.
-    return re.sub(r"\s+", " ", text).strip()
+    #
+    # Only lstrip, never rstrip: callers deliberately pass a trailing space
+    # (e.g. main.py's `text + " "`) to separate consecutive deliveries --
+    # rstrip() was eating that exact space on every single call, which barely
+    # showed with one delivery per sentence but became "every word runs
+    # together" once streaming started delivering one word at a time.
+    return re.sub(r"\s+", " ", text).lstrip()
 
 
 def type_text(text: str, batch_chars: int = 32, inter_batch_delay_s: float = 0.005) -> None:

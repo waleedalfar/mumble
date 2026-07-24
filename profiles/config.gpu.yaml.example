@@ -1,0 +1,45 @@
+# GPU profile -- for a machine with a dedicated NVIDIA GPU (built whisper.cpp
+# with -DGGML_CUDA=ON, see README "Choosing your profile"). Copy this to
+# config.yaml at the project root, then set mic_device.
+#
+#   copy profiles\config.gpu.yaml.example config.yaml   (from the project root)
+
+whisper_model: models/ggml-small.en.bin
+whisper_server: whisper.cpp/build/bin/Release/whisper-server.exe
+server_port: 8178
+
+mic_device: ""
+mic_fallback: true
+
+vad:
+  threshold: 0.5
+  min_speech_ms: 100
+  min_silence_ms: 400   # snappier than the portable default -- GPU inference is fast enough to keep up
+  speech_pad_ms: 300
+
+output:
+  mode: type
+  batch_chars: 32
+  inter_batch_delay_ms: 5
+
+enter_phrases:
+  - press enter
+
+hotkey:
+  enabled: true
+  toggle_pause: "ctrl+alt+d"
+
+overlay:
+  enabled: true
+  position: bottom-right
+
+# streaming.enabled: auto already hard-gates this off on a machine that turns
+# out not to have a capable GPU (see gpu_check.py) -- explicit "true" here is
+# just a statement of intent, not a way to bypass that check. See README's
+# "Continuous streaming mode" section for the accepted accuracy trade-off
+# before turning this on.
+streaming:
+  enabled: true
+  step_ms: 600
+  max_window_s: 10.0
+  stability_confirmations: 2

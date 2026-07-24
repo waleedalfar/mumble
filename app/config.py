@@ -42,6 +42,42 @@ output:
 # Only active in "type" mode.
 enter_phrases:
   - press enter
+
+# Global keyboard shortcut to pause/resume listening, from anywhere (works
+# even when a different app has focus). Modifiers: ctrl, alt, shift, win --
+# combine with + and a single letter/digit/F-key, e.g. "ctrl+alt+d", "f9".
+hotkey:
+  enabled: true
+  toggle_pause: "ctrl+alt+d"
+
+# Small always-on-top status bar (like Zoom's recording indicator) showing
+# idle/listening/transcribing/paused. position: bottom-right, bottom-left,
+# top-right, or top-left.
+overlay:
+  enabled: true
+  position: bottom-right
+
+# Continuous "words appear as you talk" mode, instead of waiting for the
+# whole sentence to finish. This re-transcribes the in-progress utterance
+# every step_ms and types newly-confirmed words as they stabilize; a word
+# that's already been typed can NEVER be corrected later, even if more
+# context would have transcribed it differently -- see README for the full
+# trade-off before turning this on.
+#
+# enabled: auto  -- turns on only if whisper-server reports a capable CUDA
+#                   GPU at startup (see gpu_check.py); off otherwise. This is
+#                   a hard ceiling: even "true" below is downgraded to off on
+#                   an incapable machine, never silently left slow.
+# enabled: true  -- same hard GPU check as "auto"; expresses intent to use it
+#                   whenever hardware allows.
+# enabled: false -- always off, regardless of hardware. Recommended for
+#                   CPU-only machines: the repeated re-transcription adds
+#                   real, constant load a GPU absorbs for free.
+streaming:
+  enabled: auto
+  step_ms: 600
+  max_window_s: 10.0
+  stability_confirmations: 2
 """
 
 
@@ -67,6 +103,26 @@ class SimulateSettings:
 
 
 @dataclass
+class HotkeySettings:
+    enabled: bool = True
+    toggle_pause: str = "ctrl+alt+d"
+
+
+@dataclass
+class OverlaySettings:
+    enabled: bool = True
+    position: str = "bottom-right"
+
+
+@dataclass
+class StreamingSettings:
+    enabled: str = "auto"  # "auto" | "true" | "false" -- resolved against GPU capability at runtime
+    step_ms: int = 600
+    max_window_s: float = 10.0
+    stability_confirmations: int = 2
+
+
+@dataclass
 class AppConfig:
     whisper_model: Path = PROJECT_ROOT / "models/ggml-small.en.bin"
     whisper_server: Path = PROJECT_ROOT / "whisper.cpp/build/bin/Release/whisper-server.exe"
@@ -77,11 +133,22 @@ class AppConfig:
     output: OutputSettings = field(default_factory=OutputSettings)
     enter_phrases: list = field(default_factory=lambda: ["press enter"])
     simulate: SimulateSettings = field(default_factory=SimulateSettings)
+    hotkey: HotkeySettings = field(default_factory=HotkeySettings)
+    overlay: OverlaySettings = field(default_factory=OverlaySettings)
+    streaming: StreamingSettings = field(default_factory=StreamingSettings)
 
 
 def _resolve(path_str: str) -> Path:
     p = Path(path_str)
     return p if p.is_absolute() else PROJECT_ROOT / p
+
+
+def _normalize_tristate(value) -> str:
+    # YAML parses bare true/false as Python bool; also accept the literal
+    # strings "auto"/"true"/"false" (case-insensitive).
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value).strip().lower()
 
 
 def load_config() -> AppConfig:
@@ -93,6 +160,9 @@ def load_config() -> AppConfig:
     vad_raw = raw.get("vad") or {}
     out_raw = raw.get("output") or {}
     sim_raw = raw.get("simulate") or {}
+    hotkey_raw = raw.get("hotkey") or {}
+    overlay_raw = raw.get("overlay") or {}
+    streaming_raw = raw.get("streaming") or {}
     cfg = AppConfig(
         whisper_model=_resolve(raw.get("whisper_model", "models/ggml-small.en.bin")),
         whisper_server=_resolve(raw.get("whisper_server",
@@ -116,6 +186,20 @@ def load_config() -> AppConfig:
             files=[str(p) for p in (sim_raw.get("files") or [])],
             loop=bool(sim_raw.get("loop", False)),
         ),
+        hotkey=HotkeySettings(
+            enabled=bool(hotkey_raw.get("enabled", True)),
+            toggle_pause=str(hotkey_raw.get("toggle_pause", "ctrl+alt+d")),
+        ),
+        overlay=OverlaySettings(
+            enabled=bool(overlay_raw.get("enabled", True)),
+            position=str(overlay_raw.get("position", "bottom-right")).lower(),
+        ),
+        streaming=StreamingSettings(
+            enabled=_normalize_tristate(streaming_raw.get("enabled", "auto")),
+            step_ms=int(streaming_raw.get("step_ms", 600)),
+            max_window_s=float(streaming_raw.get("max_window_s", 10.0)),
+            stability_confirmations=int(streaming_raw.get("stability_confirmations", 2)),
+        ),
     )
 
     if not cfg.whisper_model.exists():
@@ -133,4 +217,26 @@ def load_config() -> AppConfig:
     if cfg.output.mode not in ("type", "clipboard"):
         raise SystemExit(
             f"Config error: output.mode must be 'type' or 'clipboard', got {cfg.output.mode!r}")
+    if cfg.hotkey.enabled:
+        from hotkey import HotkeyParseError, _parse_hotkey
+        try:
+            _parse_hotkey(cfg.hotkey.toggle_pause)
+        except HotkeyParseError as e:
+            raise SystemExit(f"Config error: hotkey.toggle_pause: {e}\nFix it in {CONFIG_PATH}")
+    if cfg.overlay.position not in ("bottom-right", "bottom-left", "top-right", "top-left"):
+        raise SystemExit(
+            f"Config error: overlay.position must be one of bottom-right/bottom-left/"
+            f"top-right/top-left, got {cfg.overlay.position!r}")
+    if cfg.streaming.enabled not in ("auto", "true", "false"):
+        raise SystemExit(
+            f"Config error: streaming.enabled must be auto/true/false, got {cfg.streaming.enabled!r}")
+    if cfg.streaming.step_ms <= 0:
+        raise SystemExit(f"Config error: streaming.step_ms must be > 0, got {cfg.streaming.step_ms}")
+    if cfg.streaming.max_window_s <= 0:
+        raise SystemExit(
+            f"Config error: streaming.max_window_s must be > 0, got {cfg.streaming.max_window_s}")
+    if cfg.streaming.stability_confirmations < 1:
+        raise SystemExit(
+            "Config error: streaming.stability_confirmations must be >= 1, "
+            f"got {cfg.streaming.stability_confirmations}")
     return cfg

@@ -17,10 +17,15 @@ sys.stdout.reconfigure(line_buffering=True)
 
 import sounddevice as sd
 
-from audio_capture import AudioCapture, find_input_device
+from audio_capture import AudioCapture, SAMPLE_RATE, find_input_device
 from config import CONFIG_PATH, load_config
+from gpu_check import detect_cuda_capable
+from hotkey import GlobalHotkey
 from injector import press_enter, set_clipboard, type_text
+from overlay import StatusOverlay
 from simulator import SimulatedCapture
+from streaming_transcriber import StreamingSession
+from text_filter import clean_transcript
 from transcriber import WhisperServer
 from tray import TrayUI
 from vad import SileroVAD, SpeechSegmenter, VadConfig
@@ -61,19 +66,64 @@ class DictationApp:
         self.server: WhisperServer | None = None
         self.capture: AudioCapture | SimulatedCapture | None = None
         self.segmenter: SpeechSegmenter | None = None
+        self.hotkey: GlobalHotkey | None = None
+        self.overlay: StatusOverlay | None = None
+        self.streaming_active = False
+        self._streaming_session: StreamingSession | None = None
         self.tray = TrayUI(self.toggle_pause, self.open_config, self.reload_config, self.quit)
         self._lock = threading.Lock()  # guards server/capture swaps during reload
+        # Serializes SendInput/clipboard calls: with streaming, _deliver can be
+        # called from the transcribe worker (final text) AND a StreamingSession's
+        # own tick thread (partial commits) at the same time -- two concurrent
+        # SendInput callers could in principle interleave at the OS input-queue
+        # level. (The actual words-running-together bug turned out to be
+        # injector._sanitize()'s rstrip() eating the deliberate trailing
+        # separator space on every delivery, not this race -- see injector.py.
+        # This lock is still worth keeping as real, separate protection against
+        # genuinely concurrent SendInput calls.)
+        self._deliver_lock = threading.Lock()
 
     # ---- pipeline lifecycle ----------------------------------------------
 
     def start_pipeline(self):
         cfg = self.cfg
 
+        if cfg.overlay.enabled:
+            self.overlay = StatusOverlay(position=cfg.overlay.position)
+            self.overlay.start()
+        else:
+            self.overlay = None
+
+        if cfg.hotkey.enabled:
+            self.hotkey = GlobalHotkey(cfg.hotkey.toggle_pause, self.toggle_pause)
+            try:
+                self.hotkey.start()
+                print(f"Global hotkey active: {cfg.hotkey.toggle_pause!r} toggles pause/resume.")
+            except OSError as e:
+                print(f"  !! hotkey registration failed: {e}")
+                self.hotkey = None
+        else:
+            self.hotkey = None
+
         print("Starting whisper-server (loading model into VRAM)...")
         self.server = WhisperServer(str(cfg.whisper_server), str(cfg.whisper_model),
                                     port=cfg.server_port)
         self.server.start()
         print(f"whisper-server ready (model: {cfg.whisper_model.name}).")
+
+        gpu_capable, reason = detect_cuda_capable(self.server.log_path)
+        setting = cfg.streaming.enabled
+        if setting == "false":
+            self.streaming_active = False
+        elif setting == "auto":
+            self.streaming_active = gpu_capable
+            print(f"Streaming: {'auto-enabled' if gpu_capable else 'auto-disabled'} ({reason}).")
+        else:  # "true": still a hard ceiling -- never allow it on hardware that can't handle it
+            self.streaming_active = gpu_capable
+            if gpu_capable:
+                print(f"Streaming: enabled ({reason}).")
+            else:
+                print(f"Streaming: forced OFF -- streaming.enabled=true in config, but {reason}.")
 
         vad = SileroVAD(VAD_MODEL_PATH)
         vad_cfg = VadConfig(threshold=cfg.vad.threshold,
@@ -106,25 +156,81 @@ class DictationApp:
             print("Listening.")
 
     def stop_pipeline(self):
+        if self._streaming_session is not None:
+            self._streaming_session.stop()
+            self._streaming_session = None
         if self.capture is not None:
             self.capture.stop()
             self.capture = None
         if self.server is not None:
             self.server.stop()
             self.server = None
+        if self.hotkey is not None:
+            self.hotkey.stop()
+            self.hotkey = None
+        if self.overlay is not None:
+            self.overlay.stop()
+            self.overlay = None
 
     # ---- audio path -------------------------------------------------------
 
-    def _on_frame(self, frame):
-        if not self.paused and self.segmenter is not None:
-            self.segmenter.feed(frame)
+    def _set_state(self, state: str):
+        self.tray.set_state(state)
+        if self.overlay is not None:
+            self.overlay.set_state(state)
 
-    def _on_speech_start(self, start_s: float):
-        self.tray.set_state("listening")
+    def _on_frame(self, frame):
+        if self.paused or self.segmenter is None:
+            return
+        # capture whether a session already existed *before* this feed() call:
+        # if feed() synchronously creates a new one (via on_speech_start), its
+        # initial_audio already includes this frame through the VAD's own
+        # pre-roll, so adding it again here would duplicate it.
+        session_before = self._streaming_session
+        self.segmenter.feed(frame)
+        session = self._streaming_session
+        if session is not None and session is session_before:
+            session.add_frame(frame)
+
+    def _on_speech_start(self, start_s: float, initial_audio):
+        self._set_state("listening")
+        if self.streaming_active:
+            session = StreamingSession(
+                self._streaming_transcribe,
+                self.cfg.streaming.step_ms,
+                self.cfg.streaming.max_window_s,
+                self.cfg.streaming.stability_confirmations,
+                self._on_stream_commit,
+                initial_audio,
+                SAMPLE_RATE,
+            )
+            session.start()
+            self._streaming_session = session
 
     def _on_speech_end(self, start_s: float, duration_s: float, audio):
-        self.tray.set_state("transcribing")
-        self.segments.put((time.monotonic(), duration_s, audio))
+        self._set_state("transcribing")
+        session = self._streaming_session
+        self._streaming_session = None
+        if session is not None:
+            session.stop()
+        self.segments.put((time.monotonic(), duration_s, audio, session))
+
+    def _streaming_transcribe(self, audio, prompt: str = "", timeout_s: float = 8.0) -> str:
+        with self._lock:
+            server = self.server
+        if server is None:
+            raise RuntimeError("no whisper-server (pipeline stopped)")
+        return server.transcribe(audio, prompt=prompt, timeout_s=timeout_s)
+
+    def _on_stream_commit(self, words: list[str]):
+        # Reuses the same delivery path as a finished utterance (typing/
+        # clipboard, enter-phrase check). Known accepted risk: a short
+        # configured enter_phrase could in principle match a partial commit
+        # before the sentence actually ends -- see README.
+        text = clean_transcript(" ".join(words))
+        if text:
+            print(f'   ~ "{text}"')
+            self._deliver(text)
 
     # ---- transcription worker --------------------------------------------
 
@@ -133,21 +239,30 @@ class DictationApp:
             item = self.segments.get()
             if item is None:
                 return
-            queued_at, duration_s, audio = item
+            queued_at, duration_s, audio, session = item
             try:
                 text = self._transcribe_with_recovery(audio)
             except Exception as e:
                 print(f"  !! transcription failed: {e}")
-                self.tray.set_state("idle")
+                self._set_state("idle")
                 continue
             latency_ms = (time.monotonic() - queued_at) * 1000
-            print(f'>> "{text}"  ({duration_s:.1f}s audio, latency {latency_ms:.0f}ms)')
-            self._deliver(text)
+            if session is not None:
+                tail_words = session.finalize(text)
+                clean = clean_transcript(" ".join(tail_words)) if tail_words else ""
+            else:
+                clean = clean_transcript(text)
+            if clean:
+                print(f'>> "{text}"  ({duration_s:.1f}s audio, latency {latency_ms:.0f}ms)')
+                self._deliver(clean)
+            else:
+                print(f'>> "{text}"  ({duration_s:.1f}s audio, latency {latency_ms:.0f}ms) '
+                      f'[suppressed: non-speech]')
             self.log.write(f"{datetime.now():%H:%M:%S} dur={duration_s:.2f}s "
                            f"latency={latency_ms:.0f}ms text={text!r}\n")
             self.log.flush()
             if self.segments.empty():
-                self.tray.set_state("idle")
+                self._set_state("idle")
 
     def _transcribe_with_recovery(self, audio) -> str:
         """Transcribe a segment; if the server has died (killed, crashed), relaunch
@@ -171,25 +286,28 @@ class DictationApp:
         if not text:
             return
         out = self.cfg.output
-        try:
-            if out.mode == "type":
-                if _normalize_phrase(text) in {_normalize_phrase(p) for p in self.cfg.enter_phrases}:
-                    press_enter()
-                    print("   (enter pressed)")
+        with self._deliver_lock:
+            try:
+                if out.mode == "type":
+                    if _normalize_phrase(text) in {_normalize_phrase(p) for p in self.cfg.enter_phrases}:
+                        press_enter()
+                        print("   (enter pressed)")
+                    else:
+                        type_text(text + " ", batch_chars=out.batch_chars,
+                                  inter_batch_delay_s=out.inter_batch_delay_ms / 1000)
                 else:
-                    type_text(text + " ", batch_chars=out.batch_chars,
-                              inter_batch_delay_s=out.inter_batch_delay_ms / 1000)
-            else:
-                set_clipboard(text)
-                print("   (copied to clipboard)")
-        except OSError as e:
-            print(f"  !! output failed: {e}")
+                    set_clipboard(text)
+                    print("   (copied to clipboard)")
+            except OSError as e:
+                print(f"  !! output failed: {e}")
 
     # ---- tray callbacks ---------------------------------------------------
 
     def toggle_pause(self):
         self.paused = not self.paused
         self.tray.set_paused(self.paused)
+        if self.overlay is not None:
+            self.overlay.set_state("paused" if self.paused else "idle")
         print("Paused." if self.paused else "Resumed.")
 
     def open_config(self):
@@ -216,7 +334,7 @@ class DictationApp:
                 print(f"  !! restart failed: {e}")
                 return
         if not self.paused:
-            self.tray.set_state("idle")
+            self._set_state("idle")
         print("Config reloaded.")
 
     def quit(self):
@@ -234,7 +352,7 @@ class DictationApp:
         # to Ctrl+C in the console.
         tray_thread = threading.Thread(target=self.tray.run, daemon=True)
         tray_thread.start()
-        self.tray.set_state("idle")
+        self._set_state("idle")
         print("Tray icon active: right-click for Pause / Open config / Reload config / Quit.")
         print("(Ctrl+C here also quits.)")
         try:
