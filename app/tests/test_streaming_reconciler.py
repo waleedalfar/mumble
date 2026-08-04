@@ -74,6 +74,25 @@ class TestTextReconciler:
         assert r.reconcile("", is_final=False) == []
         assert r.reconcile("   ", is_final=True) == []
 
+    def test_interior_word_mismatch_does_not_retype_whole_sentence(self):
+        # regression: a single word transcribed differently by the final,
+        # fuller-context pass (e.g. "wifi" -> "wi-fi") used to zero out the
+        # overlap entirely and cause the whole already-typed sentence to be
+        # recommitted and typed a second time.
+        r = TextReconciler(stability_confirmations=1)
+        r.reconcile(
+            "please check the wifi router and the modem",
+            is_final=False,
+        )
+        assert r.committed_words == [
+            "please", "check", "the", "wifi", "router", "and", "the",
+        ]
+        tail = r.reconcile(
+            "please check the wi-fi router and the modem lights too",
+            is_final=True,
+        )
+        assert tail == ["modem", "lights", "too"]
+
     def test_punctuation_ignored_for_overlap_matching(self):
         r = TextReconciler(stability_confirmations=1)
         r.reconcile("Hello, world", is_final=False)

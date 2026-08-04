@@ -18,6 +18,7 @@ errors -- see README's "Continuous streaming mode" section.
 """
 from __future__ import annotations
 
+import difflib
 import re
 import threading
 from collections import deque
@@ -74,11 +75,30 @@ class TextReconciler:
         return promoted
 
     def _find_overlap(self, window_norm: list[str]) -> int:
-        max_k = min(len(self._committed_norm), len(window_norm))
-        for k in range(max_k, 0, -1):
-            if self._committed_norm[-k:] == window_norm[:k]:
-                return k
-        return 0
+        committed = self._committed_norm
+        if not committed or not window_norm:
+            return 0
+        # An exact-match suffix/prefix comparison breaks entirely on a single
+        # interior word coming out differently between passes (e.g. a later,
+        # fuller-context pass transcribing "wifi" as "wi-fi") -- one mismatch
+        # anywhere would make the whole committed text look like it has zero
+        # overlap with the new window, and get retyped in full.
+        # SequenceMatcher finds the real alignment around such substitutions.
+        matcher = difflib.SequenceMatcher(None, committed, window_norm, autojunk=False)
+        a_end = b_end = 0
+        for a, b, size in matcher.get_matching_blocks():
+            if size and a + size > a_end:
+                a_end, b_end = a + size, b + size
+        if b_end == 0:
+            # no shared words at all -- genuinely unrelated content (e.g. a
+            # VAD hiccup), not worth guessing a positional alignment for.
+            return 0
+        # Committed words past the last matched block, if any, are presumed
+        # re-transcribed differently rather than genuinely new -- carry them
+        # forward positionally so the alignment isn't lost over a handful of
+        # substitutions.
+        tail = len(committed) - a_end
+        return min(b_end + tail, len(window_norm))
 
     def _vote(self, cand_norm: list[str]) -> list[int]:
         """A word matching its previous tick's guess at the same position
