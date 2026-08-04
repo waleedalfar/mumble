@@ -33,7 +33,7 @@ enter_phrases:
 
 hotkey:
   enabled: true
-  toggle_pause: "ctrl+alt+d"
+  toggle_pause: "ctrl+f9"
 
 overlay:
   enabled: true

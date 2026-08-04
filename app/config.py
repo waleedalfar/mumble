@@ -46,9 +46,13 @@ enter_phrases:
 # Global keyboard shortcut to pause/resume listening, from anywhere (works
 # even when a different app has focus). Modifiers: ctrl, alt, shift, win --
 # combine with + and a single letter/digit/F-key, e.g. "ctrl+alt+d", "f9".
+# ctrl+f9 was picked as the default because F-keys are rarely bound by
+# browsers/editors, unlike letter combos (ctrl+d = bookmark, alt+d = address
+# bar, etc.) -- see README for other low-collision options if it clashes
+# with something on your machine.
 hotkey:
   enabled: true
-  toggle_pause: "ctrl+alt+d"
+  toggle_pause: "ctrl+f9"
 
 # Small always-on-top status bar (like Zoom's recording indicator) showing
 # idle/listening/transcribing/paused. position: bottom-right, bottom-left,
@@ -105,7 +109,7 @@ class SimulateSettings:
 @dataclass
 class HotkeySettings:
     enabled: bool = True
-    toggle_pause: str = "ctrl+alt+d"
+    toggle_pause: str = "ctrl+f9"
 
 
 @dataclass
@@ -188,7 +192,7 @@ def load_config() -> AppConfig:
         ),
         hotkey=HotkeySettings(
             enabled=bool(hotkey_raw.get("enabled", True)),
-            toggle_pause=str(hotkey_raw.get("toggle_pause", "ctrl+alt+d")),
+            toggle_pause=str(hotkey_raw.get("toggle_pause", "ctrl+f9")),
         ),
         overlay=OverlaySettings(
             enabled=bool(overlay_raw.get("enabled", True)),

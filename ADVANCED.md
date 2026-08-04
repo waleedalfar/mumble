@@ -149,15 +149,27 @@ gray = paused.
 
 ## Global hotkey
 
-`hotkey.toggle_pause` in `config.yaml` (default `ctrl+alt+d`) pauses/resumes
+`hotkey.toggle_pause` in `config.yaml` (default `ctrl+f9`) pauses/resumes
 listening from anywhere, without switching to the tray. It's a real Win32
 hotkey registration (`RegisterHotKey`), not a keyboard hook — it costs
 nothing on every other keystroke, since the OS only wakes the app when your
-exact combo is pressed. Change it to any `modifier+modifier+key` combo
-(`ctrl`/`alt`/`shift`/`win`, plus a single letter, digit, or F-key) and
-Reload config. If registration fails (usually because another app already
-owns that combo), the console tells you and the app keeps running without
-the hotkey — the tray toggle still works.
+exact combo is pressed. Change it to any `modifier+key` or
+`modifier+modifier+key` combo (`ctrl`/`alt`/`shift`/`win`, plus a single
+letter, digit, or F-key) and Reload config. If registration fails (usually
+because another app already owns that combo), the console tells you and the
+app keeps running without the hotkey — the tray toggle still works.
+
+**Picking a combo**: a single modifier + key (e.g. `ctrl+f9`) is faster to
+hit than a three-key chord, but the more "normal" the combo, the likelier it
+collides with something else that's already bound to it — `ctrl+d` (browser
+bookmark), `alt+d` (browser address bar), `ctrl+space` (Windows IME switch),
+and `alt+space`/`alt+f4` (window menu/close) are all claimed. `Win+`letter is
+mostly claimed by Windows itself (`Win+H` is literally Windows' own dictation
+toggle). Function keys are the safest lane since almost nothing binds them
+globally — good two-key alternatives if `ctrl+f9` conflicts with something on
+your machine: `ctrl+f10`, `ctrl+f11`, `alt+f9`. Fall back to a three-key combo
+like `ctrl+alt+d` for close to zero collision risk if you'd rather not think
+about it.
 
 ## Status overlay
 

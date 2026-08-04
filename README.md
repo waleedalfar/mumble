@@ -64,6 +64,28 @@ After that, a small icon appears near your clock (you may need to click the
 `^` arrow to see it) — right-click it any time to pause, resume, or quit.
 Click into any text box, start talking, and your words will appear.
 
+## Everyday use
+
+- **Pause/resume from anywhere**: press `Ctrl+F9` — no need to switch to the
+  tray first. This works even while a different app has focus. Want a
+  different combo? Edit `hotkey.toggle_pause` in `config.yaml` (see
+  [ADVANCED.md](ADVANCED.md) for good alternatives) and use the tray's
+  "Reload config."
+- **Say "press enter"** and it sends the Enter key instead of typing those
+  words out — handy for sending a chat message right after dictating it.
+- **Status indicator**: a small floating bar shows what's happening —
+  gray = idle, green = listening, orange = transcribing, red = paused. Move
+  or turn it off via `overlay.position` / `overlay.enabled` in `config.yaml`.
+- **Tray icon** (right-click): Pause/Resume, Open config, Reload config, Quit.
+  Config edits apply after "Reload config" — no need to restart the app.
+- **Mic unplugged or renamed?** If your configured microphone isn't found at
+  startup, the app automatically falls back to another available input
+  device instead of refusing to start (as long as `mic_fallback: true`, the
+  default).
+- Every transcript (including bits that got filtered out as non-speech) is
+  logged to `dictation.log` in the project folder, timestamped — useful if
+  you want to check what was actually heard.
+
 ## Want more control?
 
 Everything else — configuration options, tuning, an optional "words appear
