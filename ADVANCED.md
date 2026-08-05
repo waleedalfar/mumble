@@ -278,10 +278,17 @@ always be wanted.
 
 ## Troubleshooting
 
-- **"Port already in use"**: an old `whisper-server.exe` from a previous run
-  is still alive. Close the previous instance of this app first; if it's
-  truly orphaned, `taskkill /F /IM whisper-server.exe` (only when the app
-  isn't currently running).
+- **"Port already in use"**: `whisper-server.exe` is tied to the app's
+  lifetime at the OS level (a Windows Job Object with
+  `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` — see `app/transcriber.py`), so the OS
+  itself force-kills it the instant this app's process ends, whether that's a
+  normal quit, a crash, or a hard "End Task" — there's no cleanup code to run
+  and nothing to forget, so a leftover `whisper-server.exe` from a previous
+  run essentially can't happen anymore. If you still see this error, it
+  almost always means the app is already running in another window — check
+  for it there first. In the rare case it's genuinely orphaned (some
+  sandboxed environments don't allow a process to be assigned to a job),
+  close it with `taskkill /F /IM whisper-server.exe`.
 - **No microphone detected / nothing happens when you talk**: check Windows
   Settings → System → Sound → Input, select your mic, and confirm the level
   meter moves when you talk. Also check Settings → Privacy & security →
