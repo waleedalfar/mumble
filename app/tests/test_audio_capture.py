@@ -61,14 +61,14 @@ class TestAudioCapture:
     def test_find_input_device_matches_name(self):
         fake_devices = [
             {"name": "Line 1", "max_input_channels": 0, "hostapi": 0},
-            {"name": "Mic (AirPods Max)", "max_input_channels": 1, "hostapi": 0},
+            {"name": "Mic (Headset Pro)", "max_input_channels": 1, "hostapi": 0},
             {"name": "Output", "max_input_channels": 0, "hostapi": 0},
         ]
         def fake_hostapis(idx):
             return {"name": "Windows WASAPI"}
         with patch.object(sd, "query_devices", return_value=fake_devices):
             with patch.object(sd, "query_hostapis", side_effect=fake_hostapis):
-                idx = find_input_device("AirPods Max")
+                idx = find_input_device("Headset Pro")
                 assert idx == 1
 
     def test_find_input_device_no_match(self):
