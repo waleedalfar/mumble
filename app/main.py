@@ -144,16 +144,17 @@ class DictationApp:
                 raise SystemExit(f"\nSet 'mic_device' in {CONFIG_PATH} or use simulate mode.")
             try:
                 device = find_input_device(cfg.mic_device)
-                print(f"Using mic device [{device}] (matched {cfg.mic_device!r}).")
+                print(f"Using mic device [{device}].")
             except LookupError as e:
                 if not cfg.mic_fallback:
+                    # No fallback to fall back to -- the full device list in
+                    # `e` is exactly what the user needs to pick one by hand.
                     raise SystemExit(str(e)) from e
-                print(f"[mic] primary device not found: {e}")
                 device = _fallback_input_device()
-                print(f"[mic] fallback to device [{device}].")
+                print(f"[mic] configured device not found (not connected yet?); "
+                      f"using device [{device}] instead.")
             self.capture = AudioCapture(device=device)
             self.capture.start(on_frame=self._on_frame)
-            print("Listening.")
 
     def stop_pipeline(self):
         if self._streaming_session is not None:
@@ -353,8 +354,7 @@ class DictationApp:
         tray_thread = threading.Thread(target=self.tray.run, daemon=True)
         tray_thread.start()
         self._set_state("idle")
-        print("Tray icon active: right-click for Pause / Open config / Reload config / Quit.")
-        print("(Ctrl+C here also quits.)")
+        print("Listening, tray icon active near your clock (right-click to pause/quit; Ctrl+C here also quits).")
         try:
             while not self._quit_event.wait(timeout=0.2):
                 pass
