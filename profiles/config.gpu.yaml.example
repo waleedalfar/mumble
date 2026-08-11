@@ -13,7 +13,7 @@ mic_fallback: true
 
 vad:
   threshold: 0.5
-  min_speech_ms: 100
+  min_speech_ms: 200
   min_silence_ms: 400   # snappier than the portable default -- GPU inference is fast enough to keep up
   speech_pad_ms: 300
 

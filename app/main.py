@@ -250,9 +250,9 @@ class DictationApp:
             latency_ms = (time.monotonic() - queued_at) * 1000
             if session is not None:
                 tail_words = session.finalize(text)
-                clean = clean_transcript(" ".join(tail_words)) if tail_words else ""
+                clean = clean_transcript(" ".join(tail_words), duration_s) if tail_words else ""
             else:
-                clean = clean_transcript(text)
+                clean = clean_transcript(text, duration_s)
             if clean:
                 print(f'>> "{text}"  ({duration_s:.1f}s audio, latency {latency_ms:.0f}ms)')
                 self._deliver(clean)

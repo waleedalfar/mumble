@@ -28,7 +28,9 @@ mic_fallback: true
 
 vad:
   threshold: 0.5          # speech probability needed to count a frame as speech (0-1)
-  min_speech_ms: 100      # this much consecutive speech starts a segment (rejects blips)
+  min_speech_ms: 200      # this much consecutive speech starts a segment (rejects blips, e.g. a
+                           # breath/click right after you stop talking that whisper can hallucinate
+                           # a stock phrase like "Thank you." from -- see text_filter.py)
   min_silence_ms: 600     # this much consecutive silence ends a segment (lower = snappier, may split sentences)
   speech_pad_ms: 300      # audio kept before/after the detected speech (protects word edges)
 
@@ -88,7 +90,7 @@ streaming:
 @dataclass
 class VadSettings:
     threshold: float = 0.5
-    min_speech_ms: int = 100
+    min_speech_ms: int = 200
     min_silence_ms: int = 600
     speech_pad_ms: int = 300
 
@@ -176,7 +178,7 @@ def load_config() -> AppConfig:
         mic_fallback=bool(raw.get("mic_fallback", True)),
         vad=VadSettings(
             threshold=float(vad_raw.get("threshold", 0.5)),
-            min_speech_ms=int(vad_raw.get("min_speech_ms", 100)),
+            min_speech_ms=int(vad_raw.get("min_speech_ms", 200)),
             min_silence_ms=int(vad_raw.get("min_silence_ms", 600)),
             speech_pad_ms=int(vad_raw.get("speech_pad_ms", 300)),
         ),
