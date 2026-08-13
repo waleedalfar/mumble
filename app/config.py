@@ -13,7 +13,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = PROJECT_ROOT / "config.yaml"
 
 DEFAULT_CONFIG = """\
-# Voice dictation config. Edit freely; use the tray menu's "Reload config" to apply
+# Mumble config. Edit freely; use the tray menu's "Reload config" to apply
 # without restarting the app. Relative paths are resolved from the project root.
 
 # Any ggml .bin dropped into models/ can be used here.

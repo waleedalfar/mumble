@@ -1,4 +1,4 @@
-"""Background voice dictation: mic -> silero VAD -> whisper.cpp -> SendInput typing.
+"""Mumble: background voice dictation. mic -> silero VAD -> whisper.cpp -> SendInput typing.
 
 Run as `python main.py`. All tuning lives in config.yaml at the project root;
 the tray icon (right-click) has Pause/Resume, Open config, Reload config, Quit.

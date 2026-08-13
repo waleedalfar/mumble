@@ -1,4 +1,4 @@
-# Advanced guide
+# Mumble — Advanced guide
 
 Everything beyond the quick setup in [README.md](README.md): manual setup
 (if `setup.ps1` can't finish something), hardware profiles, every feature in

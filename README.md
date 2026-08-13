@@ -1,7 +1,7 @@
-# Voice Dictation
+# Mumble
 
-Background voice dictation for Windows. Talk, and your words get typed
-wherever your cursor is — a browser chat box, a terminal, any text field.
+Mumble is background voice dictation for Windows. Talk, and your words get
+typed wherever your cursor is — a browser chat box, a terminal, any text field.
 
 Runs entirely on your own computer. No audio or text ever leaves your machine.
 
@@ -49,9 +49,9 @@ partway.
 
 ## Run it
 
-Double-click `start.bat` in the project folder (or the "Voice Dictation"
-shortcut on your desktop, if you've set one up) — a console window opens
-showing status, and the app starts. Closing that window stops the app.
+Double-click `start.bat` in the project folder (or the "Mumble" shortcut on
+your desktop, if you've set one up) — a console window opens showing status,
+and the app starts. Closing that window stops the app.
 
 Prefer a terminal? Same thing, spelled out:
 

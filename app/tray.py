@@ -39,18 +39,18 @@ class TrayUI:
             pystray.MenuItem("Reload config", lambda: on_reload_config()),
             pystray.MenuItem("Quit", lambda: on_quit()),
         )
-        self._icon = pystray.Icon("dictation", self._icons["idle"], "Dictation: starting", menu)
+        self._icon = pystray.Icon("mumble", self._icons["idle"], "Mumble: starting", menu)
 
     def set_state(self, state: str) -> None:
         if self._paused and state != "paused":
             return
         self._icon.icon = self._icons[state]
-        self._icon.title = f"Dictation: {state}"
+        self._icon.title = f"Mumble: {state}"
 
     def set_paused(self, paused: bool) -> None:
         self._paused = paused
         self._icon.icon = self._icons["paused" if paused else "idle"]
-        self._icon.title = "Dictation: paused" if paused else "Dictation: idle"
+        self._icon.title = "Mumble: paused" if paused else "Mumble: idle"
         self._icon.update_menu()
 
     def run(self) -> None:

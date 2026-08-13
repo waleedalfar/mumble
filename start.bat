@@ -1,5 +1,5 @@
 @echo off
-title Voice Dictation
+title Mumble
 cd /d "%~dp0app"
 "%~dp0venv\Scripts\python.exe" main.py
 echo.
