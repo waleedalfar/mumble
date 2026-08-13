@@ -49,6 +49,12 @@ partway.
 
 ## Run it
 
+Double-click `start.bat` in the project folder (or the "Voice Dictation"
+shortcut on your desktop, if you've set one up) — a console window opens
+showing status, and the app starts. Closing that window stops the app.
+
+Prefer a terminal? Same thing, spelled out:
+
 ```bash
 cd app
 ../venv/Scripts/python.exe main.py
@@ -57,8 +63,7 @@ cd app
 **The very first time**, it won't know which microphone to use — it'll print
 a list of your available microphones and ask you to pick one. Open the
 `config.yaml` file that just appeared in the project folder, set
-`mic_device` to your microphone's name (or part of it), and run the command
-again.
+`mic_device` to your microphone's name (or part of it), and run it again.
 
 After that, a small icon appears near your clock (you may need to click the
 `^` arrow to see it) — right-click it any time to pause, resume, or quit.
