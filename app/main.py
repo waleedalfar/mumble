@@ -144,15 +144,16 @@ class DictationApp:
                 raise SystemExit(f"\nSet 'mic_device' in {CONFIG_PATH} or use simulate mode.")
             try:
                 device = find_input_device(cfg.mic_device)
-                print(f"Using mic device [{device}].")
             except LookupError as e:
                 if not cfg.mic_fallback:
                     # No fallback to fall back to -- the full device list in
                     # `e` is exactly what the user needs to pick one by hand.
                     raise SystemExit(str(e)) from e
                 device = _fallback_input_device()
-                print(f"[mic] configured device not found (not connected yet?); "
-                      f"using device [{device}] instead.")
+            # Whether this came from an exact config match or the fallback
+            # above, report it the same way -- which device ends up in use
+            # matters, not which path got there.
+            print(f"Using mic device: {sd.query_devices(device)['name']}")
             self.capture = AudioCapture(device=device)
             self.capture.start(on_frame=self._on_frame)
 
