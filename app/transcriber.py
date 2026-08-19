@@ -20,6 +20,7 @@ import numpy as np
 import requests
 
 from audio_capture import SAMPLE_RATE
+from text_filter import join_segments
 
 # whisper.cpp's encoder/decoder threading rarely benefits past ~8 threads
 # (memory-bandwidth bound, not core-bound) and using every logical core can
@@ -146,12 +147,16 @@ def _auto_thread_count() -> int:
 
 class WhisperServer:
     def __init__(self, server_path: str, model_path: str,
-                 host: str = "127.0.0.1", port: int = 8178, threads: int | None = None):
+                 host: str = "127.0.0.1", port: int = 8178, threads: int | None = None,
+                 pause_threshold_s: float = 0.35):
         self.server_path = Path(server_path)
         self.model_path = Path(model_path)
         self.host = host
         self.port = port
         self.threads = threads if threads is not None else _auto_thread_count()
+        # See text_filter.join_segments() -- softens whisper's own
+        # trigger-happy mid-utterance periods using real segment pause times.
+        self.pause_threshold_s = pause_threshold_s
         self.log_path = Path("whisper-server.log")
         self._proc: subprocess.Popen | None = None
         self._log_file = None
@@ -257,7 +262,18 @@ class WhisperServer:
             w.writeframes((np.clip(audio, -1.0, 1.0) * 32767).astype(np.int16).tobytes())
         buf.seek(0)
 
-        data = {"response_format": "json", "temperature": "0.0"}
+        data = {
+            "response_format": "verbose_json",
+            "temperature": "0.0",
+            # Per-request override of the server's --no-timestamps startup
+            # flag (see examples/server/server.cpp) -- gets real per-segment
+            # start/end times back so join_segments() can measure pauses.
+            "no_timestamps": "false",
+            # verbose_json otherwise runs language-probability detection by
+            # default, which is wasted work: the server is already pinned to
+            # English via -l en at startup.
+            "no_language_probabilities": "true",
+        }
         if prompt:
             data["prompt"] = prompt
 
@@ -268,4 +284,5 @@ class WhisperServer:
             timeout=timeout_s,
         )
         resp.raise_for_status()
-        return resp.json().get("text", "").strip()
+        segments = resp.json().get("segments", [])
+        return join_segments(segments, self.pause_threshold_s).strip()

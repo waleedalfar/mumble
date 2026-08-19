@@ -239,6 +239,7 @@ for now.
 | `vad.min_speech_ms` | How much consecutive speech is needed to start a segment (rejects short blips/clicks) |
 | `vad.min_silence_ms` | How much consecutive silence is needed to end a segment — **the main latency knob**, see below |
 | `vad.speech_pad_ms` | Audio kept before/after detected speech, so word edges aren't clipped |
+| `punctuation.pause_threshold_ms` | How long a mid-utterance pause has to be before whisper's period there is trusted — shorter gaps get downgraded to a comma instead (see "Spoken symbols and softer punctuation" below) |
 | `output.mode` | `type` = inject into the focused window; `clipboard` = copy only, don't type |
 | `output.batch_chars` / `output.inter_batch_delay_ms` | How text is chunked/paced while typing — raise the delay if characters get dropped in a particular app |
 | `enter_phrases` | If a whole utterance transcribes to exactly one of these phrases, the Enter key is pressed instead of typing the words |
@@ -262,6 +263,36 @@ clipped. Reload config after each change to test it live.
 If waiting for the pause at all feels too slow, that's what streaming mode
 addresses directly (see "Continuous streaming mode" above) — a different
 trade-off (accuracy for immediacy), not a tuning value.
+
+## Spoken symbols and softer punctuation
+
+Say these words and the literal character is typed instead, joined tight to
+the words on either side (no surrounding spaces) — "my file underscore two
+dot slash test" types `my file_2 dot/test`:
+
+| Say | Get |
+|---|---|
+| `slash` | `/` |
+| `underscore` | `_` |
+| `dash` / `hyphen` | `-` |
+| `colon` | `:` |
+| `at sign` | `@` |
+
+Trade-off worth knowing: these are ordinary English words too, so a sentence
+that genuinely uses one of them ("let's dash to the store") gets swallowed
+the same way. Not currently configurable — if it becomes a problem in
+practice, drop the offending word from `_SYMBOL_WORDS` in `text_filter.py`.
+
+Separately: whisper.cpp often ends a sentence with a period at an ordinary
+clause pause, not just a real break — the app now asks whisper.cpp for real
+per-segment timestamps and only trusts a mid-utterance period when the
+measured silence before it is at least `punctuation.pause_threshold_ms`
+(default 350ms); shorter gaps get the period downgraded to a comma and the
+next word's capital lowered, so it reads as one continuing sentence instead
+of two. This only applies *inside* one VAD-bounded utterance — the boundary
+between two separate utterances is still governed entirely by
+`vad.min_silence_ms` (see "Tuning latency" below), so
+`pause_threshold_ms` only has any effect while set below that value.
 
 ## Non-speech filtering
 

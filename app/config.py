@@ -34,6 +34,17 @@ vad:
   min_silence_ms: 600     # this much consecutive silence ends a segment (lower = snappier, may split sentences)
   speech_pad_ms: 300      # audio kept before/after the detected speech (protects word edges)
 
+# whisper often ends a sentence with a period at an ordinary clause pause,
+# not just a real sentence break. A period found mid-utterance is downgraded
+# to a comma (and the next word's capital lowered) unless the measured
+# silence before it was at least this long. Keep this comfortably below
+# vad.min_silence_ms above -- no pause inside one utterance can ever reach
+# that value, or VAD would have ended the utterance there instead, so a
+# threshold at or above it would downgrade every mid-utterance period
+# unconditionally.
+punctuation:
+  pause_threshold_ms: 350
+
 output:
   mode: type              # "type" = inject into focused window, "clipboard" = copy only
   batch_chars: 32         # characters per SendInput burst
@@ -96,6 +107,11 @@ class VadSettings:
 
 
 @dataclass
+class PunctuationSettings:
+    pause_threshold_ms: int = 350
+
+
+@dataclass
 class OutputSettings:
     mode: str = "type"
     batch_chars: int = 32
@@ -136,6 +152,7 @@ class AppConfig:
     mic_device: str = ""
     mic_fallback: bool = True
     vad: VadSettings = field(default_factory=VadSettings)
+    punctuation: PunctuationSettings = field(default_factory=PunctuationSettings)
     output: OutputSettings = field(default_factory=OutputSettings)
     enter_phrases: list = field(default_factory=lambda: ["press enter"])
     simulate: SimulateSettings = field(default_factory=SimulateSettings)
@@ -164,6 +181,7 @@ def load_config() -> AppConfig:
 
     raw = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8")) or {}
     vad_raw = raw.get("vad") or {}
+    punct_raw = raw.get("punctuation") or {}
     out_raw = raw.get("output") or {}
     sim_raw = raw.get("simulate") or {}
     hotkey_raw = raw.get("hotkey") or {}
@@ -181,6 +199,9 @@ def load_config() -> AppConfig:
             min_speech_ms=int(vad_raw.get("min_speech_ms", 200)),
             min_silence_ms=int(vad_raw.get("min_silence_ms", 600)),
             speech_pad_ms=int(vad_raw.get("speech_pad_ms", 300)),
+        ),
+        punctuation=PunctuationSettings(
+            pause_threshold_ms=int(punct_raw.get("pause_threshold_ms", 350)),
         ),
         output=OutputSettings(
             mode=str(out_raw.get("mode", "type")).lower(),
@@ -223,6 +244,10 @@ def load_config() -> AppConfig:
     if cfg.output.mode not in ("type", "clipboard"):
         raise SystemExit(
             f"Config error: output.mode must be 'type' or 'clipboard', got {cfg.output.mode!r}")
+    if cfg.punctuation.pause_threshold_ms <= 0:
+        raise SystemExit(
+            f"Config error: punctuation.pause_threshold_ms must be > 0, "
+            f"got {cfg.punctuation.pause_threshold_ms}")
     if cfg.hotkey.enabled:
         from hotkey import HotkeyParseError, _parse_hotkey
         try:

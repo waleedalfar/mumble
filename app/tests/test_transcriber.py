@@ -8,7 +8,9 @@ import socket
 import subprocess
 import sys
 import time
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
+
+import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import transcriber
@@ -105,3 +107,47 @@ class TestPortAlreadyInUse:
                 assert f"Port {port} is already in use" in str(e)
         finally:
             blocker.close()
+
+
+class TestTranscribeRequest:
+    def _server(self, **kwargs) -> transcriber.WhisperServer:
+        return transcriber.WhisperServer("fake-server.exe", "fake-model.bin", **kwargs)
+
+    def _mock_response(self, segments):
+        resp = MagicMock()
+        resp.raise_for_status.return_value = None
+        resp.json.return_value = {"segments": segments}
+        return resp
+
+    def test_request_asks_for_segment_timestamps_without_language_probs(self):
+        server = self._server()
+        server._session.post = MagicMock(
+            return_value=self._mock_response([{"text": "hi", "start": 0.0, "end": 0.5}]))
+
+        server.transcribe(np.zeros(1600, dtype=np.float32))
+
+        _, kwargs = server._session.post.call_args
+        assert kwargs["data"]["response_format"] == "verbose_json"
+        assert kwargs["data"]["no_timestamps"] == "false"
+        assert kwargs["data"]["no_language_probabilities"] == "true"
+
+    def test_segments_are_routed_through_join_segments(self):
+        # Two segments with a short gap: real behavior of join_segments()
+        # (downgrade + lowercase-continue) must show up in transcribe()'s
+        # return value, not just in the raw top-level "text" field.
+        server = self._server(pause_threshold_s=0.35)
+        segments = [
+            {"text": " Claude.", "start": 0.0, "end": 1.0},
+            {"text": " There's a lot of leeway.", "start": 1.1, "end": 3.0},
+        ]
+        server._session.post = MagicMock(return_value=self._mock_response(segments))
+
+        result = server.transcribe(np.zeros(1600, dtype=np.float32))
+
+        assert result == "Claude, there's a lot of leeway."
+
+    def test_no_segments_returns_empty_string(self):
+        server = self._server()
+        server._session.post = MagicMock(return_value=self._mock_response([]))
+
+        assert server.transcribe(np.zeros(1600, dtype=np.float32)) == ""
